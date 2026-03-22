@@ -1,0 +1,49 @@
+name: dbt Tests
+
+on:
+  push:
+    branches: [main, dev]
+    paths:
+      - 'models/**'
+      - 'macros/**'
+      - 'dbt_project.yml'
+      - 'profiles.yml'
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  dbt-test:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # required for OIDC token exchange with GCP
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dbt
+        run: pip install dbt-bigquery==1.9.0
+
+      - name: Authenticate to GCP via OIDC
+        uses: google-github-actions/auth@v2
+        id: auth
+        with:
+          workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.SERVICE_ACCOUNT }}
+
+      - name: dbt compile (syntax check)
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+        run: dbt compile --profiles-dir . --project-dir .
+
+      - name: dbt test — sources
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+        run: dbt test --profiles-dir . --project-dir . --select source:thelook_ecommerce

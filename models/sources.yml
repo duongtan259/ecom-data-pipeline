@@ -1,0 +1,54 @@
+version: 2
+
+sources:
+  - name: thelook_ecommerce
+    description: "TheLook e-commerce public dataset — fictitious apparel retailer"
+    database: bigquery-public-data
+    schema: thelook_ecommerce
+    tables:
+      - name: orders
+        description: "Customer orders header records"
+        columns:
+          - name: order_id
+            description: "Unique order identifier"
+            tests:
+              - unique
+              - not_null
+          - name: user_id
+            tests:
+              - not_null
+          - name: status
+            tests:
+              - accepted_values:
+                  arguments:
+                    values: ['Shipped', 'Complete', 'Processing', 'Cancelled', 'Returned']
+
+      - name: users
+        description: "Registered customer accounts"
+        columns:
+          - name: id
+            tests:
+              - unique
+              - not_null
+
+      - name: order_items
+        description: "Individual line items per order"
+        columns:
+          - name: id
+            tests:
+              - unique
+              - not_null
+
+      - name: products
+        description: "Product catalog"
+        columns:
+          - name: id
+            tests:
+              - unique
+              - not_null
+
+      - name: events
+        description: "User clickstream/behavior events"
+
+      - name: inventory_items
+        description: "Inventory records per product"

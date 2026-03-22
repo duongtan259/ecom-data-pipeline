@@ -1,0 +1,37 @@
+version: 2
+
+models:
+  - name: bronze_orders
+    description: "Raw orders ingested from TheLook e-commerce public dataset"
+    columns:
+      - name: order_id
+        tests:
+          - unique
+          - not_null
+      - name: user_id
+        tests:
+          - not_null
+
+  - name: bronze_users
+    description: "Raw user/customer accounts from TheLook"
+    columns:
+      - name: user_id
+        tests:
+          - unique
+          - not_null
+
+  - name: bronze_order_items
+    description: "Raw order line items from TheLook"
+    columns:
+      - name: order_item_id
+        tests:
+          - unique
+          - not_null
+
+  - name: bronze_products
+    description: "Raw product catalog from TheLook"
+    columns:
+      - name: product_id
+        tests:
+          - unique
+          - not_null

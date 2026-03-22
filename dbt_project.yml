@@ -1,0 +1,45 @@
+name: 'personal_data_pipeline'
+version: '1.0.0'
+
+profile: 'personal_data_pipeline'
+
+model-paths: ["models"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+models:
+  personal_data_pipeline:
+    bronze:
+      +materialized: table
+      +schema: "{{ var('bronze_schema', 'bronze_' ~ target.name) }}"
+      +persist_docs:
+        relation: true
+        columns: true
+    staging:
+      +materialized: table
+      +schema: "{{ var('staging_schema', 'silver_' ~ target.name) }}"
+      +persist_docs:
+        relation: true
+        columns: true
+    marts:
+      +materialized: table
+      +schema: "{{ var('marts_schema', 'gold_' ~ target.name) }}"
+      +persist_docs:
+        relation: true
+        columns: true
+    reporting:
+      +materialized: table
+      +schema: "{{ var('reporting_schema', 'reporting_' ~ target.name) }}"
+      +persist_docs:
+        relation: true
+        columns: true
+
+vars:
+  bronze_schema: "{{ 'bronze_' ~ target.name }}"
+  staging_schema: "{{ 'silver_' ~ target.name }}"
+  marts_schema: "{{ 'gold_' ~ target.name }}"
+  reporting_schema: "{{ 'reporting_' ~ target.name }}"

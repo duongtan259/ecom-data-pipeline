@@ -1,0 +1,36 @@
+version: 2
+
+models:
+  - name: daily_revenue
+    description: "Daily revenue, order count, and gross margin aggregates"
+    columns:
+      - name: order_date
+        tests:
+          - unique
+          - not_null
+
+  - name: user_cohorts
+    description: "Cohort retention — active users and revenue by cohort month and months-since-first-order"
+    columns:
+      - name: cohort_month
+        tests:
+          - not_null
+      - name: activity_month
+        tests:
+          - not_null
+
+  - name: product_performance
+    description: "Per-product sales KPIs — revenue, margin, unique buyers"
+    columns:
+      - name: product_id
+        tests:
+          - unique
+          - not_null
+
+  - name: customer_summary
+    description: "Per-customer lifetime value, order history, and segment"
+    columns:
+      - name: user_id
+        tests:
+          - unique
+          - not_null

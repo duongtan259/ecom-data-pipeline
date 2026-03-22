@@ -1,0 +1,18 @@
+version: 2
+
+models:
+  - name: rpt_executive_summary
+    description: "Monthly KPI roll-up with MoM revenue growth — primary executive dashboard source"
+    columns:
+      - name: order_month
+        tests:
+          - unique
+          - not_null
+
+  - name: rpt_top_products
+    description: "Top 50 products by revenue, with revenue and margin rank"
+    columns:
+      - name: product_id
+        tests:
+          - unique
+          - not_null

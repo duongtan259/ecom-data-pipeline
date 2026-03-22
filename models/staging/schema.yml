@@ -1,0 +1,34 @@
+version: 2
+
+models:
+  - name: stg_orders
+    description: "Cleaned and typed orders — source of truth for order status and dates"
+    columns:
+      - name: order_id
+        tests:
+          - unique
+          - not_null
+      - name: status
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['shipped', 'complete', 'processing', 'cancelled', 'returned']
+
+  - name: stg_users
+    description: "Cleaned customer profiles with derived registration date fields"
+    columns:
+      - name: user_id
+        tests:
+          - unique
+          - not_null
+
+  - name: stg_order_items
+    description: "Order line items enriched with product cost and gross margin"
+    columns:
+      - name: order_item_id
+        tests:
+          - unique
+          - not_null
+      - name: sale_price
+        tests:
+          - not_null

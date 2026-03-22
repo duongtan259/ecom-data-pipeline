@@ -1,0 +1,19 @@
+personal_data_pipeline:
+  target: dev
+  outputs:
+    dev:
+      type: bigquery
+      method: oauth          # uses Application Default Credentials (ADC)
+      project: "{{ env_var('GCP_PROJECT_ID') }}"
+      dataset: dbt_dev
+      location: US
+      timeout_seconds: 300
+      threads: 4
+    prod:
+      type: bigquery
+      method: oauth
+      project: "{{ env_var('GCP_PROJECT_ID') }}"
+      dataset: dbt_prod
+      location: US
+      timeout_seconds: 300
+      threads: 4

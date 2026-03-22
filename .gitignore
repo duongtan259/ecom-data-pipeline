@@ -1,0 +1,29 @@
+# Environment
+.env
+*.json
+!package.json
+
+# dbt
+target/
+dbt_packages/
+logs/
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+dbt-env/
+
+# Airflow
+logs/
+airflow.db
+
+# IDE
+.idea/
+.vscode/
+*.DS_Store
+dbt_internal_packages/
+.user.yml
