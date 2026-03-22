@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       id-token: write   # required for OIDC token exchange with GCP
-      contents: read
+      contents: write
       pages: write      # required to deploy to GitHub Pages
 
     steps:
