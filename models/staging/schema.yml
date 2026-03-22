@@ -11,8 +11,7 @@ models:
       - name: status
         tests:
           - accepted_values:
-              arguments:
-                values: ['shipped', 'complete', 'processing', 'cancelled', 'returned']
+              values: ['shipped', 'complete', 'processing', 'cancelled', 'returned']
 
   - name: stg_users
     description: "Cleaned customer profiles with derived registration date fields"
