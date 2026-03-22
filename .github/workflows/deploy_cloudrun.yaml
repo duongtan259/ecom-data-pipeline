@@ -1,0 +1,75 @@
+name: Deploy Cloud Run Jobs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Dockerfile.cloudrun'
+      - 'run_dbt.sh'
+      - 'models/**'
+      - 'macros/**'
+      - 'dbt_project.yml'
+      - 'profiles.yml'
+      - 'gcp/workflow.yaml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP via OIDC
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.SERVICE_ACCOUNT }}
+          create_credentials_file: true
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ secrets.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and push dbt image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.cloudrun
+          push: true
+          tags: |
+            ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/ecom-pipeline/dbt:latest
+            ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/ecom-pipeline/dbt:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Update Cloud Run Jobs
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_REGION: ${{ secrets.GCP_REGION }}
+        run: |
+          IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/ecom-pipeline/dbt:${{ github.sha }}"
+          for layer in bronze silver gold reporting; do
+            gcloud run jobs update "${layer}-layer" \
+              --image="$IMAGE" \
+              --region="$GCP_REGION" \
+              --project="$GCP_PROJECT_ID"
+          done
+
+      - name: Deploy Cloud Workflow
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_REGION: ${{ secrets.GCP_REGION }}
+        run: |
+          gcloud workflows deploy ecom-pipeline \
+            --location="$GCP_REGION" \
+            --source=gcp/workflow.yaml \
+            --project="$GCP_PROJECT_ID"

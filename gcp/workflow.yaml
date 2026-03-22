@@ -1,0 +1,76 @@
+main:
+  steps:
+    - init:
+        assign:
+          - project: ${sys.get_env("GOOGLE_CLOUD_PROJECT_ID")}
+          - region: ${sys.get_env("GOOGLE_CLOUD_LOCATION")}
+
+    - bronze:
+        call: run_job
+        args:
+          project: ${project}
+          region:  ${region}
+          job:     bronze-layer
+
+    - silver:
+        call: run_job
+        args:
+          project: ${project}
+          region:  ${region}
+          job:     silver-layer
+
+    - gold:
+        call: run_job
+        args:
+          project: ${project}
+          region:  ${region}
+          job:     gold-layer
+
+    - reporting:
+        call: run_job
+        args:
+          project: ${project}
+          region:  ${region}
+          job:     reporting-layer
+
+    - done:
+        return: "ecom pipeline completed"
+
+# ── subworkflow ────────────────────────────────────────────────────────────────
+run_job:
+  params: [project, region, job]
+  steps:
+    - trigger:
+        call: http.post
+        args:
+          url: ${"https://run.googleapis.com/v2/projects/" + project + "/locations/" + region + "/jobs/" + job + ":run"}
+          auth:
+            type: OAuth2
+        result: trigger_resp
+
+    - get_execution:
+        assign:
+          - execution_name: ${trigger_resp.body.metadata.name}
+
+    - poll:
+        call: http.get
+        args:
+          url: ${"https://run.googleapis.com/v2/" + execution_name}
+          auth:
+            type: OAuth2
+        result: exec_resp
+
+    - check:
+        switch:
+          - condition: ${not("completionTime" in exec_resp.body)}
+            next: sleep
+          - condition: ${exec_resp.body.succeededCount > 0}
+            return: ${job + " succeeded"}
+          - condition: true
+            raise: ${"Job " + job + " failed (succeededCount=0, failedCount=" + string(exec_resp.body.failedCount) + ")"}
+
+    - sleep:
+        call: sys.sleep
+        args:
+          seconds: 30
+        next: poll
