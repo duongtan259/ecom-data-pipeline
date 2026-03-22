@@ -149,7 +149,10 @@ personal-data-pipeline/
 │   ├── parse_datetime.sql
 │   └── unique_combination_of_columns.sql
 └── .github/workflows/
-    └── dbt_tests.yaml
+    ├── dbt_tests.yaml      # compile + source tests on push
+    ├── dbt_docs.yaml       # generate & deploy docs to GitHub Pages
+    ├── docker_build.yaml   # build & push image to Artifact Registry
+    └── lint.yaml
 ```
 
 ---
@@ -159,7 +162,7 @@ personal-data-pipeline/
 ### Run dbt locally (outside Docker)
 
 ```bash
-pip install dbt-bigquery==1.7.4
+pip install dbt-bigquery==1.9.0
 export GCP_PROJECT_ID=your-project-id
 export GOOGLE_APPLICATION_CREDENTIALS=/path/to/key.json
 
@@ -192,4 +195,9 @@ Set these repository secrets:
 | `WORKLOAD_IDENTITY_PROVIDER` | GCP Workload Identity Provider resource name |
 | `SERVICE_ACCOUNT` | Service account email |
 
-The `dbt_tests.yaml` workflow runs `dbt compile` + source tests on every push to `main`/`dev`.
+| `GCP_REGION` | GCP region (e.g. `asia-southeast1`) |
+
+Workflows:
+- `dbt_tests.yaml` — `dbt compile` + source tests on every push to `main`/`dev`
+- `dbt_docs.yaml` — generates and publishes dbt docs to GitHub Pages
+- `docker_build.yaml` — builds and pushes the Airflow image to Artifact Registry
