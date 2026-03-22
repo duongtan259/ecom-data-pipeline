@@ -1,123 +1,80 @@
-# Personal Data Pipeline
+# ecom-data-pipeline
 
-A portfolio-grade data pipeline built with **Apache Airflow + dbt + BigQuery**, containerised with **Docker Compose**.
+A portfolio-grade batch data pipeline built on **dbt + BigQuery**, orchestrated by **Cloud Workflows + Cloud Run Jobs** on GCP.
 
-Mirrors a production medallion architecture (Bronze → Silver → Gold → Reporting) using the
+Implements a medallion architecture (Bronze → Silver → Gold → Reporting) sourced from the
 [TheLook e-commerce](https://console.cloud.google.com/marketplace/product/bigquery-public-data/thelook-ecommerce)
-BigQuery public dataset as the data source.
+BigQuery public dataset.
+
+---
 
 ## Architecture
 
 ```
-                    ┌─────────────────────────────────────────────┐
-                    │         Docker Compose (local)              │
-                    │                                             │
-                    │   ┌──────────┐    ┌──────────────────────┐  │
-                    │   │ Postgres │    │      Airflow          │  │
-                    │   │(metadata)│    │  webserver+scheduler  │  │
-                    │   └──────────┘    └──────────────────────┘  │
-                    └─────────────────────────────────────────────┘
-                                          │ triggers dbt
-                                          ▼
-                    ┌─────────────────────────────────────────────┐
-                    │              BigQuery (GCP)                  │
-                    │                                             │
-                    │  bigquery-public-data.thelook_ecommerce     │
-                    │           │                                 │
-                    │           ▼                                 │
-                    │  bronze_dev   (raw data)                    │
-                    │           │                                 │
-                    │           ▼                                 │
-                    │  silver_dev   (cleaned + typed)             │
-                    │           │                                 │
-                    │           ▼                                 │
-                    │  gold_dev     (business aggregates)         │
-                    │           │                                 │
-                    │           ▼                                 │
-                    │  reporting_dev (dashboard-ready)            │
-                    └─────────────────────────────────────────────┘
-```
-
-### DAG chain (runs daily at 1 AM UTC)
-
-```
-bronze_layer_dag  →  silver_layer_dag  →  gold_layer_dag  →  reporting_layer_dag
+Cloud Scheduler  (daily 1 AM UTC)
+       │
+       ▼
+Cloud Workflows  (ecom-pipeline)
+       │
+       ├─ bronze-layer  ──▶  Cloud Run Job  ──▶  dbt run --select bronze
+       │
+       ├─ silver-layer  ──▶  Cloud Run Job  ──▶  dbt run + test --select staging
+       │
+       ├─ gold-layer    ──▶  Cloud Run Job  ──▶  dbt run + test --select marts
+       │
+       └─ reporting-layer ▶  Cloud Run Job  ──▶  dbt run + test --select reporting
+                                    │
+                                    ▼
+                              BigQuery (US)
+                         bigquery-public-data.thelook_ecommerce
+                                    │
+                         bronze_prod  →  silver_prod  →  gold_prod  →  reporting_prod
 ```
 
 ### dbt models
 
 | Layer | Dataset | Models |
 |-------|---------|--------|
-| Bronze | `bronze_dev` | `bronze_orders`, `bronze_users`, `bronze_order_items`, `bronze_products` |
-| Silver | `silver_dev` | `stg_orders`, `stg_users`, `stg_order_items` |
-| Gold | `gold_dev` | `daily_revenue`, `user_cohorts`, `product_performance`, `customer_summary` |
-| Reporting | `reporting_dev` | `rpt_executive_summary`, `rpt_top_products` |
+| Bronze | `bronze_prod` | `bronze_orders`, `bronze_users`, `bronze_order_items`, `bronze_products` |
+| Silver | `silver_prod` | `stg_orders`, `stg_users`, `stg_order_items` |
+| Gold | `gold_prod` | `daily_revenue`, `user_cohorts`, `product_performance`, `customer_summary` |
+| Reporting | `reporting_prod` | `rpt_executive_summary`, `rpt_top_products` |
 
 ---
 
-## Prerequisites
+## GCP Resources
 
-- Docker Desktop
-- A personal GCP project with BigQuery API enabled
-- A GCP service account JSON key with **BigQuery Data Editor** + **BigQuery Job User** roles
+| Resource | Name | Purpose |
+|---|---|---|
+| Artifact Registry | `ecom-pipeline` | Docker image for dbt runner |
+| Cloud Run Jobs | `bronze/silver/gold/reporting-layer` | Run each dbt layer |
+| Cloud Workflows | `ecom-pipeline` | Orchestrate the 4-job chain |
+| Cloud Scheduler | `ecom-pipeline-daily` | Trigger at 1 AM UTC |
+| BigQuery datasets | `*_prod` | Production output |
 
 ---
 
 ## Quick Start
 
-### 1. Clone and configure
+### One-time GCP setup
 
 ```bash
-git clone <your-repo-url> personal-data-pipeline
-cd personal-data-pipeline
+export GCP_PROJECT_ID=your-project-id
+export GCP_REGION=us-central1
 
-cp .env.example .env
-# Edit .env — fill in GCP_PROJECT_ID and GOOGLE_APPLICATION_CREDENTIALS
+# Build and push the dbt image first
+docker buildx build --platform linux/amd64 -f Dockerfile.cloudrun \
+  -t ${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/ecom-pipeline/dbt:latest \
+  --push .
+
+# Provision all GCP resources (Run Jobs, Workflow, Scheduler, IAM, BQ datasets)
+bash gcp/setup_cloudrun.sh
 ```
 
-### 2. Create BigQuery datasets
-
-In your GCP project, create these datasets (region: US):
-
-```
-bronze_dev
-silver_dev
-gold_dev
-reporting_dev
-```
-
-Or run via `bq`:
+### Trigger manually
 
 ```bash
-for ds in bronze_dev silver_dev gold_dev reporting_dev; do
-  bq mk --dataset --location=US $GCP_PROJECT_ID.$ds
-done
-```
-
-### 3. Start the stack
-
-```bash
-# First run — initialise the Airflow DB and create admin user
-docker compose up airflow-init
-
-# Start everything
-docker compose up -d
-
-# Check all containers are healthy
-docker compose ps
-```
-
-### 4. Open Airflow
-
-Go to [http://localhost:8080](http://localhost:8080) — login: `admin` / `admin`
-
-Enable and trigger **`bronze_layer_dag`** manually to kick off the full pipeline.
-
-### 5. Tear down
-
-```bash
-docker compose down          # stops containers, keeps volumes
-docker compose down -v       # stops containers AND deletes Postgres volume
+gcloud workflows run ecom-pipeline --location=us-central1 --project=your-project-id
 ```
 
 ---
@@ -125,18 +82,14 @@ docker compose down -v       # stops containers AND deletes Postgres volume
 ## Project Structure
 
 ```
-personal-data-pipeline/
-├── docker-compose.yml          # Airflow stack (LocalExecutor)
-├── Dockerfile                  # Airflow image + dbt-bigquery
-├── requirements.txt
-├── .env.example
+ecom-data-pipeline/
+├── Dockerfile.cloudrun         # Slim dbt image (Cloud Run Jobs)
+├── run_dbt.sh                  # Cloud Run entrypoint
 ├── dbt_project.yml
-├── profiles.yml                # dbt → BigQuery connection
-├── dags/
-│   ├── bronze_layer_dag.py
-│   ├── silver_layer_dag.py
-│   ├── gold_layer_dag.py
-│   └── reporting_layer_dag.py
+├── profiles.yml                # dbt → BigQuery (dev + prod targets)
+├── gcp/
+│   ├── setup_cloudrun.sh       # one-time GCP provisioning script
+│   └── workflow.yaml           # Cloud Workflows definition
 ├── models/
 │   ├── sources.yml
 │   ├── bronze/
@@ -144,60 +97,26 @@ personal-data-pipeline/
 │   ├── marts/
 │   └── reporting/
 ├── macros/
-│   ├── generate_schema_name.sql
-│   ├── generate_surrogate_key.sql
-│   ├── parse_datetime.sql
-│   └── unique_combination_of_columns.sql
 └── .github/workflows/
-    ├── dbt_tests.yaml      # compile + source tests on push
-    ├── dbt_docs.yaml       # generate & deploy docs to GitHub Pages
-    ├── docker_build.yaml   # build & push image to Artifact Registry
-    └── lint.yaml
-```
-
----
-
-## Development
-
-### Run dbt locally (outside Docker)
-
-```bash
-pip install dbt-bigquery==1.9.0
-export GCP_PROJECT_ID=your-project-id
-export GOOGLE_APPLICATION_CREDENTIALS=/path/to/key.json
-
-dbt run --select bronze
-dbt run --select staging
-dbt run --select marts
-dbt run --select reporting
-
-dbt test
-dbt docs generate && dbt docs serve
-```
-
-### Run dbt inside the running container
-
-```bash
-docker compose exec airflow-scheduler bash
-cd /opt/airflow/dbt
-dbt run --select bronze
+    ├── dbt_tests.yaml          # compile + source tests on push
+    ├── dbt_docs.yaml           # docs → GitHub Pages
+    └── deploy_cloudrun.yaml    # build dbt image, update Cloud Run Jobs + Workflow
 ```
 
 ---
 
 ## GitHub Actions CI
 
-Set these repository secrets:
+Repository secrets required:
 
 | Secret | Value |
 |--------|-------|
-| `GCP_PROJECT_ID` | Your GCP project ID |
-| `WORKLOAD_IDENTITY_PROVIDER` | GCP Workload Identity Provider resource name |
-| `SERVICE_ACCOUNT` | Service account email |
-
-| `GCP_REGION` | GCP region (e.g. `asia-southeast1`) |
+| `GCP_PROJECT_ID` | GCP project ID |
+| `GCP_REGION` | Region (e.g. `us-central1`) |
+| `WORKLOAD_IDENTITY_PROVIDER` | WIF provider resource name |
+| `SERVICE_ACCOUNT` | CI service account email |
 
 Workflows:
-- `dbt_tests.yaml` — `dbt compile` + source tests on every push to `main`/`dev`
-- `dbt_docs.yaml` — generates and publishes dbt docs to GitHub Pages
-- `docker_build.yaml` — builds and pushes the Airflow image to Artifact Registry
+- **`dbt_tests.yaml`** — `dbt compile` + source tests on every push
+- **`dbt_docs.yaml`** — generates and deploys dbt docs to GitHub Pages
+- **`deploy_cloudrun.yaml`** — builds dbt image, updates Cloud Run Jobs + Workflow on every push to `main`
